@@ -1,0 +1,138 @@
+/// CREATE EVENT ENTITY
+/// @description Init motion data
+
+#macro BB_RIGHT		bbox_right-.001
+#macro BB_LEFT		bbox_left+.001
+#macro BB_TOP		bbox_top+.001
+#macro BB_BOT		bbox_bottom-.001
+
+#macro ORIGIN_X		sprite_get_xoffset(sprite_index)
+#macro ORIGIN_Y		sprite_get_yoffset(sprite_index)
+
+image_speed = 0;
+
+hspd		= 0;
+vspd		= 0;
+
+max_speed = CELL_SIZE-1;
+
+motion_data = {
+	current_speed	: 0,
+	
+	on_ground		: 0,
+	in_air			: 0,
+	in_liquid		: 0,
+	
+	left_collision	: 0,
+	right_collision : 0,
+	up_collision	: 0,
+	collision_hspd	: 0,
+	collision_vspd	: 0,
+}
+
+image_xscale = DRAW_SPRITE_SIZE / BASE_SPRITE_SIZE
+image_yscale = DRAW_SPRITE_SIZE / BASE_SPRITE_SIZE
+
+/// STEP EVENT ENTITY
+/// @description Movment calculations
+
+motion_data = {
+	current_speed	: 0,
+	
+	on_ground		: 0,
+	in_air			: 0,
+	in_liquid		: WORLD_COLLISION_GRID[# x BIT_SHIFT_DOWN, y BIT_SHIFT_DOWN].liquid.is_liquid,
+	
+	left_collision	: 0,
+	right_collision : 0,
+	up_collision	: 0,
+	collision_hspd	: 0,
+	collision_vspd	: 0,
+}
+
+
+if (!WORLD_COLLISION_GRID[# x BIT_SHIFT_DOWN, y BIT_SHIFT_DOWN].liquid.is_liquid) {
+	vspd += BASE_GRAVITY;
+}
+
+var _liquid = WORLD_COLLISION_GRID[# x BIT_SHIFT_DOWN, y BIT_SHIFT_DOWN].liquid
+
+if (motion_data.in_liquid) {
+	var _thickness =  (1-_liquid.thickness)
+
+	hspd = lerp(hspd, hspd  * _thickness, _thickness)
+	vspd = lerp(vspd, (vspd * _thickness) +  (BASE_GRAVITY * _thickness), _thickness)
+}
+
+motion_data.current_speed = point_distance(0, 0, hspd, vspd);
+
+#region Wall grid Collision Hspd
+if (hspd < 0) {
+	var _goal_x = (floor(BB_LEFT+hspd)) BIT_SHIFT_DOWN;
+	
+	if (WORLD_COLLISION_GRID[# _goal_x, BB_TOP BIT_SHIFT_DOWN].is_solid ||
+		WORLD_COLLISION_GRID[# _goal_x, BB_BOT BIT_SHIFT_DOWN].is_solid) {
+		motion_data.left_collision = true	
+		motion_data.collision_hspd = hspd
+		hspd = 0;
+		x = ((_goal_x + 1) BIT_SHIFT_UP) - (round(x - BB_RIGHT));
+	}
+}
+
+if (hspd > 0) {
+	var _goal_x = (ceil(BB_RIGHT+hspd)) BIT_SHIFT_DOWN;
+	
+	if (WORLD_COLLISION_GRID[# _goal_x, BB_TOP BIT_SHIFT_DOWN].is_solid ||
+		WORLD_COLLISION_GRID[# _goal_x, BB_BOT BIT_SHIFT_DOWN].is_solid) {
+		motion_data.right_collision = true
+		motion_data.collision_hspd = hspd
+		hspd = 0;
+		x = ((_goal_x) BIT_SHIFT_UP) - (round(x - BB_LEFT));
+	}
+}
+#endregion
+
+
+#region Wall grid Collision vspd
+if (vspd < 0) {
+	var _goal_y = (floor(BB_TOP+vspd)) BIT_SHIFT_DOWN;
+	
+	if (WORLD_COLLISION_GRID[# BB_LEFT BIT_SHIFT_DOWN,  _goal_y].is_solid||
+		WORLD_COLLISION_GRID[# BB_RIGHT BIT_SHIFT_DOWN, _goal_y].is_solid) {
+		motion_data.up_collision = true;
+		motion_data.collision_vspd = vspd;
+		vspd = 0;
+		y = ((_goal_y + 1) BIT_SHIFT_UP) + (round(y - BB_TOP));
+	}
+}
+
+if (vspd > 0) {
+	var _goal_y = (ceil(BB_BOT+vspd)) BIT_SHIFT_DOWN;
+	
+	if (WORLD_COLLISION_GRID[# BB_LEFT BIT_SHIFT_DOWN,  _goal_y].is_solid ||
+		WORLD_COLLISION_GRID[# BB_RIGHT BIT_SHIFT_DOWN, _goal_y].is_solid) {
+		motion_data.on_ground = true;
+		motion_data.collision_vspd = vspd;	
+		vspd = 0;
+		y = round(((_goal_y) BIT_SHIFT_UP)) + round(y - BB_BOT);
+	}
+}
+
+#endregion
+
+
+x += hspd;
+y += vspd;
+
+x = clamp(x, max_speed + (1 BIT_SHIFT_UP), (WORLD_WIDTH  BIT_SHIFT_UP) - (1 BIT_SHIFT_UP) - max_speed);
+y = clamp(y, max_speed + (1 BIT_SHIFT_UP), (WORLD_HEIGHT BIT_SHIFT_UP) - (1 BIT_SHIFT_UP) - max_speed);
+
+
+/// CELL STRUCT to fill ds world grid
+function world_grid_cell(_x, _y,) constructor {
+  is_solid			= false;
+  	liquid	 =  {
+		is_liquid : false,
+		thickness : 0.5,
+	}
+}
